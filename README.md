@@ -72,10 +72,10 @@ Green path is VIO odometry; red path is odometry under visual loop closure.
 
 ```
     roslaunch vins vins_rviz.launch
-    rosrun vins vins_node ~/catkin_ws/src/VINS-Fusion/config/euroc/euroc_stereo_imu_config.yaml 
-    rosrun vins vins_node /home/lumen/workspace/catkin_ws/src/VINS-Fusion/config/webots/webots_stereo_imu_config.yaml
+    rosrun vins vins_node /home/ubt/workspace/noetic_ws/src/VINS-Fusion/config/euroc/euroc_stereo_imu_config.yaml 
+    rosrun vins vins_node /home/ubt/workspace/noetic_ws/src/VINS-Fusion/config/webots/webots_stereo_imu_config.yaml
     (optional) rosrun loop_fusion loop_fusion_node ~/catkin_ws/src/VINS-Fusion/config/euroc/euroc_stereo_imu_config.yaml 
-    rosbag play /home/lumen/workspace/catkin_ws/ros1_vio_0630_0953.bag
+    rosbag play /home/ubt/workspace/datasets/ros1_vio_0630_0953.bag
 ```
 
 ### 3.3 Stereo cameras
