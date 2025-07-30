@@ -7,36 +7,32 @@
 #include "ceres/rotation.h"
 #include "Camera.h"
 
-namespace camodocal
-{
+namespace camodocal {
 
 /**
  * C. Mei, and P. Rives, Single View Point Omnidirectional Camera Calibration
  * from Planar Grids, ICRA 2007
  */
 
-class CataCamera: public Camera
+class CataCamera : public Camera
 {
 public:
-    class Parameters: public Camera::Parameters
+    class Parameters : public Camera::Parameters
     {
     public:
         Parameters();
-        Parameters(const std::string& cameraName,
-                   int w, int h,
-                   double xi,
-                   double k1, double k2, double p1, double p2,
+        Parameters(const std::string &cameraName, int w, int h, double xi, double k1, double k2, double p1, double p2,
                    double gamma1, double gamma2, double u0, double v0);
 
-        double& xi(void);
-        double& k1(void);
-        double& k2(void);
-        double& p1(void);
-        double& p2(void);
-        double& gamma1(void);
-        double& gamma2(void);
-        double& u0(void);
-        double& v0(void);
+        double &xi(void);
+        double &k1(void);
+        double &k2(void);
+        double &p1(void);
+        double &p2(void);
+        double &gamma1(void);
+        double &gamma2(void);
+        double &u0(void);
+        double &v0(void);
 
         double xi(void) const;
         double k1(void) const;
@@ -48,11 +44,11 @@ public:
         double u0(void) const;
         double v0(void) const;
 
-        bool readFromYamlFile(const std::string& filename);
-        void writeToYamlFile(const std::string& filename) const;
+        bool readFromYamlFile(const std::string &filename);
+        void writeToYamlFile(const std::string &filename) const;
 
-        Parameters& operator=(const Parameters& other);
-        friend std::ostream& operator<< (std::ostream& out, const Parameters& params);
+        Parameters &operator=(const Parameters &other);
+        friend std::ostream &operator<<(std::ostream &out, const Parameters &params);
 
     private:
         double m_xi;
@@ -69,74 +65,65 @@ public:
     CataCamera();
 
     /**
-    * \brief Constructor from the projection model parameters
-    */
-    CataCamera(const std::string& cameraName,
-               int imageWidth, int imageHeight,
-               double xi, double k1, double k2, double p1, double p2,
-               double gamma1, double gamma2, double u0, double v0);
+     * \brief Constructor from the projection model parameters
+     */
+    CataCamera(const std::string &cameraName, int imageWidth, int imageHeight, double xi, double k1, double k2,
+               double p1, double p2, double gamma1, double gamma2, double u0, double v0);
     /**
-    * \brief Constructor from the projection model parameters
-    */
-    CataCamera(const Parameters& params);
+     * \brief Constructor from the projection model parameters
+     */
+    CataCamera(const Parameters &params);
 
     Camera::ModelType modelType(void) const;
-    const std::string& cameraName(void) const;
+    const std::string &cameraName(void) const;
     int imageWidth(void) const;
     int imageHeight(void) const;
 
-    void estimateIntrinsics(const cv::Size& boardSize,
-                            const std::vector< std::vector<cv::Point3f> >& objectPoints,
-                            const std::vector< std::vector<cv::Point2f> >& imagePoints);
+    void estimateIntrinsics(const cv::Size &boardSize, const std::vector<std::vector<cv::Point3f> > &objectPoints,
+                            const std::vector<std::vector<cv::Point2f> > &imagePoints);
 
     // Lift points from the image plane to the sphere
-    void liftSphere(const Eigen::Vector2d& p, Eigen::Vector3d& P) const;
+    void liftSphere(const Eigen::Vector2d &p, Eigen::Vector3d &P) const;
     //%output P
 
     // Lift points from the image plane to the projective space
-    void liftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P) const;
+    void liftProjective(const Eigen::Vector2d &p, Eigen::Vector3d &P) const;
     //%output P
 
     // Projects 3D points to the image plane (Pi function)
-    void spaceToPlane(const Eigen::Vector3d& P, Eigen::Vector2d& p) const;
+    void spaceToPlane(const Eigen::Vector3d &P, Eigen::Vector2d &p) const;
     //%output p
 
     // Projects 3D points to the image plane (Pi function)
     // and calculates jacobian
-    void spaceToPlane(const Eigen::Vector3d& P, Eigen::Vector2d& p,
-                      Eigen::Matrix<double,2,3>& J) const;
+    void spaceToPlane(const Eigen::Vector3d &P, Eigen::Vector2d &p, Eigen::Matrix<double, 2, 3> &J) const;
     //%output p
     //%output J
 
-    void undistToPlane(const Eigen::Vector2d& p_u, Eigen::Vector2d& p) const;
+    void undistToPlane(const Eigen::Vector2d &p_u, Eigen::Vector2d &p) const;
     //%output p
 
     template <typename T>
-    static void spaceToPlane(const T* const params,
-                             const T* const q, const T* const t,
-                             const Eigen::Matrix<T, 3, 1>& P,
-                             Eigen::Matrix<T, 2, 1>& p);
+    static void spaceToPlane(const T *const params, const T *const q, const T *const t, const Eigen::Matrix<T, 3, 1> &P,
+                             Eigen::Matrix<T, 2, 1> &p);
 
-    void distortion(const Eigen::Vector2d& p_u, Eigen::Vector2d& d_u) const;
-    void distortion(const Eigen::Vector2d& p_u, Eigen::Vector2d& d_u,
-                    Eigen::Matrix2d& J) const;
+    void distortion(const Eigen::Vector2d &p_u, Eigen::Vector2d &d_u) const;
+    void distortion(const Eigen::Vector2d &p_u, Eigen::Vector2d &d_u, Eigen::Matrix2d &J) const;
 
-    void initUndistortMap(cv::Mat& map1, cv::Mat& map2, double fScale = 1.0) const;
-    cv::Mat initUndistortRectifyMap(cv::Mat& map1, cv::Mat& map2,
-                                    float fx = -1.0f, float fy = -1.0f,
-                                    cv::Size imageSize = cv::Size(0, 0),
-                                    float cx = -1.0f, float cy = -1.0f,
+    void initUndistortMap(cv::Mat &map1, cv::Mat &map2, double fScale = 1.0) const;
+    cv::Mat initUndistortRectifyMap(cv::Mat &map1, cv::Mat &map2, float fx = -1.0f, float fy = -1.0f,
+                                    cv::Size imageSize = cv::Size(0, 0), float cx = -1.0f, float cy = -1.0f,
                                     cv::Mat rmat = cv::Mat::eye(3, 3, CV_32F)) const;
 
     int parameterCount(void) const;
 
-    const Parameters& getParameters(void) const;
-    void setParameters(const Parameters& parameters);
+    const Parameters &getParameters(void) const;
+    void setParameters(const Parameters &parameters);
 
-    void readParameters(const std::vector<double>& parameterVec);
-    void writeParameters(std::vector<double>& parameterVec) const;
+    void readParameters(const std::vector<double> &parameterVec);
+    void writeParameters(std::vector<double> &parameterVec) const;
 
-    void writeParametersToYamlFile(const std::string& filename) const;
+    void writeParametersToYamlFile(const std::string &filename) const;
 
     std::string parametersToString(void) const;
 
@@ -151,11 +138,8 @@ typedef boost::shared_ptr<CataCamera> CataCameraPtr;
 typedef boost::shared_ptr<const CataCamera> CataCameraConstPtr;
 
 template <typename T>
-void
-CataCamera::spaceToPlane(const T* const params,
-                         const T* const q, const T* const t,
-                         const Eigen::Matrix<T, 3, 1>& P,
-                         Eigen::Matrix<T, 2, 1>& p)
+void CataCamera::spaceToPlane(const T *const params, const T *const q, const T *const t,
+                              const Eigen::Matrix<T, 3, 1> &P, Eigen::Matrix<T, 2, 1> &p)
 {
     T P_w[3];
     P_w[0] = T(P(0));
@@ -181,7 +165,7 @@ CataCamera::spaceToPlane(const T* const params,
     T p2 = params[4];
     T gamma1 = params[5];
     T gamma2 = params[6];
-    T alpha = T(0); //cameraParams.alpha();
+    T alpha = T(0);  // cameraParams.alpha();
     T u0 = params[7];
     T v0 = params[8];
 
@@ -205,6 +189,6 @@ CataCamera::spaceToPlane(const T* const params,
     p(1) = gamma2 * v + v0;
 }
 
-}
+}  // namespace camodocal
 
 #endif
