@@ -16,6 +16,7 @@
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
+#include <shm_msgs/msg/Image.h>
 #include <visualization_msgs/Marker.h>
 #include <std_msgs/Bool.h>
 #include <cv_bridge/cv_bridge.h>
@@ -35,9 +36,11 @@
 #define SKIP_FIRST_CNT 10
 using namespace std;
 
-queue<sensor_msgs::ImageConstPtr> image_buf;
+using AutoImage = shm_msgs::msg::Image;
+
+queue<AutoImage::ConstSharedPtr> image_buf;
 queue<sensor_msgs::PointCloudConstPtr> point_buf;
-queue<nav_msgs::Odometry::ConstPtr> pose_buf;
+queue<nav_msgs::OdometryConstPtr> pose_buf;
 queue<Eigen::Vector3d> odometry_buf;
 std::mutex m_buf;
 std::mutex m_process;
@@ -92,7 +95,7 @@ void new_sequence()
     m_buf.unlock();
 }
 
-void image_callback(const sensor_msgs::ImageConstPtr &image_msg)
+void image_callback(const AutoImage::ConstSharedPtr &image_msg)
 {
     // ROS_INFO("image_callback!");
     m_buf.lock();
@@ -102,12 +105,13 @@ void image_callback(const sensor_msgs::ImageConstPtr &image_msg)
 
     // detect unstable camera stream
     if (last_image_time == -1)
-        last_image_time = image_msg->header.stamp.toSec();
-    else if (image_msg->header.stamp.toSec() - last_image_time > 1.0 || image_msg->header.stamp.toSec() < last_image_time) {
+        last_image_time = rosa::Time(image_msg->header.stamp).seconds();
+    else if (rosa::Time(image_msg->header.stamp).seconds() - last_image_time > 1.0 ||
+             rosa::Time(image_msg->header.stamp).seconds() < last_image_time) {
         ROS_WARN("image discontinue! detect a new sequence!");
         new_sequence();
     }
-    last_image_time = image_msg->header.stamp.toSec();
+    last_image_time = rosa::Time(image_msg->header.stamp).seconds();
 }
 
 void point_callback(const sensor_msgs::PointCloudConstPtr &point_msg)
@@ -164,7 +168,7 @@ void margin_point_callback(const sensor_msgs::PointCloudConstPtr &point_msg)
     pub_margin_cloud.publish(point_cloud);
 }
 
-void pose_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
+void pose_callback(const nav_msgs::OdometryConstPtr &pose_msg)
 {
     // ROS_INFO("pose_callback!");
     m_buf.lock();
@@ -181,7 +185,7 @@ void pose_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     */
 }
 
-void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
+void vio_callback(const nav_msgs::OdometryConstPtr &pose_msg)
 {
     // ROS_INFO("vio_callback!");
     Vector3d vio_t(pose_msg->pose.pose.position.x, pose_msg->pose.pose.position.y, pose_msg->pose.pose.position.z);
@@ -219,7 +223,7 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     cameraposevisual.publish_by(pub_camera_pose_visual, pose_msg->header);
 }
 
-void extrinsic_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
+void extrinsic_callback(const nav_msgs::OdometryConstPtr &pose_msg)
 {
     m_process.lock();
     tic = Vector3d(pose_msg->pose.pose.position.x, pose_msg->pose.pose.position.y, pose_msg->pose.pose.position.z);
@@ -232,29 +236,37 @@ void extrinsic_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
 void process()
 {
     while (true) {
-        sensor_msgs::ImageConstPtr image_msg = NULL;
+        AutoImage::ConstSharedPtr image_msg = nullptr;
         sensor_msgs::PointCloudConstPtr point_msg = NULL;
-        nav_msgs::Odometry::ConstPtr pose_msg = NULL;
+        nav_msgs::OdometryConstPtr pose_msg = NULL;
 
         // find out the messages with same time stamp
         m_buf.lock();
         if (!image_buf.empty() && !point_buf.empty() && !pose_buf.empty()) {
-            if (image_buf.front()->header.stamp.toSec() > pose_buf.front()->header.stamp.toSec()) {
+            if (rosa::Time(image_buf.front()->header.stamp).seconds() >
+                rosa::Time(pose_buf.front()->header.stamp).seconds()) {
                 pose_buf.pop();
                 printf("throw pose at beginning\n");
-            } else if (image_buf.front()->header.stamp.toSec() > point_buf.front()->header.stamp.toSec()) {
+            } else if (rosa::Time(image_buf.front()->header.stamp).seconds() >
+                       rosa::Time(point_buf.front()->header.stamp).seconds()) {
                 point_buf.pop();
                 printf("throw point at beginning\n");
-            } else if (image_buf.back()->header.stamp.toSec() >= pose_buf.front()->header.stamp.toSec() &&
-                       point_buf.back()->header.stamp.toSec() >= pose_buf.front()->header.stamp.toSec()) {
+            } else if (rosa::Time(image_buf.back()->header.stamp).seconds() >=
+                           rosa::Time(pose_buf.front()->header.stamp).seconds() &&
+                       rosa::Time(point_buf.back()->header.stamp).seconds() >=
+                           rosa::Time(pose_buf.front()->header.stamp).seconds()) {
                 pose_msg = pose_buf.front();
                 pose_buf.pop();
                 while (!pose_buf.empty()) pose_buf.pop();
-                while (image_buf.front()->header.stamp.toSec() < pose_msg->header.stamp.toSec()) image_buf.pop();
+                while (rosa::Time(image_buf.front()->header.stamp).seconds() <
+                       rosa::Time(pose_msg->header.stamp).seconds())
+                    image_buf.pop();
                 image_msg = image_buf.front();
                 image_buf.pop();
 
-                while (point_buf.front()->header.stamp.toSec() < pose_msg->header.stamp.toSec()) point_buf.pop();
+                while (rosa::Time(point_buf.front()->header.stamp).seconds() <
+                       rosa::Time(pose_msg->header.stamp).seconds())
+                    point_buf.pop();
                 point_msg = point_buf.front();
                 point_buf.pop();
             }
@@ -278,21 +290,8 @@ void process()
                 skip_cnt = 0;
             }
 
-            cv_bridge::CvImageConstPtr ptr;
-            if (image_msg->encoding == "8UC1") {
-                sensor_msgs::Image img;
-                img.header = image_msg->header;
-                img.height = image_msg->height;
-                img.width = image_msg->width;
-                img.is_bigendian = image_msg->is_bigendian;
-                img.step = image_msg->step;
-                img.data = image_msg->data;
-                img.encoding = "mono8";
-                ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
-            } else
-                ptr = cv_bridge::toCvCopy(image_msg, sensor_msgs::image_encodings::MONO8);
-
-            cv::Mat image = ptr->image;
+            cv::Mat image =
+                cv_bridge::toCvCopy(image_msg, sensor_msgs::image_encodings::MONO8)->image.clone();
             // build keyframe
             Vector3d T =
                 Vector3d(pose_msg->pose.pose.position.x, pose_msg->pose.pose.position.y, pose_msg->pose.pose.position.z);
@@ -326,7 +325,7 @@ void process()
                     // printf("u %f, v %f \n", p_2d_uv.x, p_2d_uv.y);
                 }
 
-                KeyFrame *keyframe = new KeyFrame(pose_msg->header.stamp.toSec(), frame_index, T, R, image, point_3d,
+                KeyFrame *keyframe = new KeyFrame(rosa::Time(pose_msg->header.stamp).seconds(), frame_index, T, R, image, point_3d,
                                                   point_2d_uv, point_2d_normal, point_id, sequence);
                 m_process.lock();
                 start_flag = 1;
@@ -375,9 +374,9 @@ int main(int argc, char **argv)
 
     if (argc != 2) {
         printf(
-            "please intput: rosrun loop_fusion loop_fusion_node [config file] \n"
-            "for example: rosrun loop_fusion loop_fusion_node "
-            "/home/tony-ws1/catkin_ws/src/VINS-Fusion/config/euroc/euroc_stereo_imu_config.yaml \n");
+            "please input: rosa run loop_fusion loop_fusion_node [config file] \n"
+            "for example: rosa run loop_fusion loop_fusion_node "
+            "/path/to/VINS-Fusion/config/euroc/euroc_stereo_imu_config.yaml \n");
         return 0;
     }
 
@@ -398,11 +397,11 @@ int main(int argc, char **argv)
     ROW = fsSettings["image_height"];
     COL = fsSettings["image_width"];
     std::string pkg_path = ros::package::getPath("loop_fusion");
-    string vocabulary_file = pkg_path + "/../support_files/brief_k10L6.bin";
+    string vocabulary_file = pkg_path + "/support_files/brief_k10L6.bin";
     cout << "vocabulary_file" << vocabulary_file << endl;
     posegraph.loadVocabulary(vocabulary_file);
 
-    BRIEF_PATTERN_FILE = pkg_path + "/../support_files/brief_pattern.yml";
+    BRIEF_PATTERN_FILE = pkg_path + "/support_files/brief_pattern.yml";
     cout << "BRIEF_PATTERN_FILE" << BRIEF_PATTERN_FILE << endl;
 
     int pn = config_file.find_last_of('/');
@@ -439,12 +438,17 @@ int main(int argc, char **argv)
         load_flag = 1;
     }
 
-    ros::Subscriber sub_vio = n.subscribe("/vins_estimator/odometry", 2000, vio_callback);
-    ros::Subscriber sub_image = n.subscribe(IMAGE_TOPIC, 2000, image_callback);
-    ros::Subscriber sub_pose = n.subscribe("/vins_estimator/keyframe_pose", 2000, pose_callback);
-    ros::Subscriber sub_extrinsic = n.subscribe("/vins_estimator/extrinsic", 2000, extrinsic_callback);
-    ros::Subscriber sub_point = n.subscribe("/vins_estimator/keyframe_point", 2000, point_callback);
-    ros::Subscriber sub_margin_point = n.subscribe("/vins_estimator/margin_cloud", 2000, margin_point_callback);
+    ros::Subscriber sub_vio = n.subscribe<nav_msgs::Odometry>("/vins_estimator/odometry", 2000, vio_callback);
+    auto sub_image =
+        n.node().createReader<AutoImage>(IMAGE_TOPIC, rosa::SensorDataQoS(), image_callback);
+    ros::Subscriber sub_pose =
+        n.subscribe<nav_msgs::Odometry>("/vins_estimator/keyframe_pose", 2000, pose_callback);
+    ros::Subscriber sub_extrinsic =
+        n.subscribe<nav_msgs::Odometry>("/vins_estimator/extrinsic", 2000, extrinsic_callback);
+    ros::Subscriber sub_point =
+        n.subscribe<sensor_msgs::PointCloud>("/vins_estimator/keyframe_point", 2000, point_callback);
+    ros::Subscriber sub_margin_point =
+        n.subscribe<sensor_msgs::PointCloud>("/vins_estimator/margin_cloud", 2000, margin_point_callback);
 
     pub_match_img = n.advertise<sensor_msgs::Image>("match_image", 1000);
     pub_camera_pose_visual = n.advertise<visualization_msgs::MarkerArray>("camera_pose_visual", 1000);

@@ -11,6 +11,100 @@ VINS-Fusion is an optimization-based multi-sensor state estimator, which achieve
 - online temporal calibration (time offset between camera and IMU)
 - visual loop closure
 
+## ROSA 移植版快速使用
+
+当前分支已经从 ROS1/catkin 迁移到 ROSA/ament。VINS 和 loop_fusion 的相机输入使用
+`shm_msgs::msg::Image`，订阅方式与 `vslam_app` 一致，采用 `createReader` 和
+`rosa::SensorDataQoS()`。原有的 ROS1 使用说明保留在本文后半部分，仅供上游功能参考。
+
+### 环境要求
+
+- ROSA 安装目录：默认 `/opt/rosa`
+- ROSA 版 `cv_bridge`：默认
+  `/home/ubt/workspace/t800_ws/src/vnav_integration/install_x86/cv_bridge`
+- CMake、colcon、OpenCV、Ceres、Eigen3、Boost
+
+如果实际安装位置不同，可通过环境变量覆盖：
+
+```bash
+export ROSA_SETUP=/path/to/rosa/setup.bash
+export CV_BRIDGE_PREFIX=/path/to/cv_bridge/install_prefix
+```
+
+### 编译
+
+在仓库根目录执行：
+
+```bash
+./scripts/build_rosa.sh
+```
+
+脚本默认将构建结果放在工作空间中：
+
+- `build`：`/home/ubt/workspace/vins_ws/build`
+- `install`：`/home/ubt/workspace/vins_ws/install`
+- `log`：`/home/ubt/workspace/vins_ws/log`
+
+可选环境变量：
+
+```bash
+export VINS_WS_ROOT=/home/ubt/workspace/vins_ws
+export VINS_BUILD_JOBS=4
+export VINS_BUILD_TYPE=Release
+export VINS_BUILD_BASE=/tmp/vins_build
+export VINS_INSTALL_BASE=/tmp/vins_install
+export VINS_LOG_BASE=/tmp/vins_log
+./scripts/build_rosa.sh
+```
+
+编译目标包括 `vins_node`、`loop_fusion_node`、`global_fusion_node`、
+`Calibrations`、`kitti_odom_test` 和 `kitti_gps_test`。
+
+### 运行
+
+默认只启动 VINS：
+
+```bash
+./scripts/run_rosa.sh config/euroc/euroc_stereo_imu_config.yaml
+```
+
+同时启动闭环检测：
+
+```bash
+./scripts/run_rosa.sh --loop config/euroc/euroc_stereo_imu_config.yaml
+```
+
+同时启动闭环和 GPS 全局融合：
+
+```bash
+./scripts/run_rosa.sh --loop --global config/webots/webots_stereo_imu_config.yaml
+```
+
+也可以分别启动节点：
+
+```bash
+source /opt/rosa/setup.bash
+source /home/ubt/workspace/vins_ws/install/setup.bash
+rosa run vins vins_node /absolute/path/to/config.yaml
+rosa run loop_fusion loop_fusion_node /absolute/path/to/config.yaml
+rosa run global_fusion global_fusion_node
+```
+
+运行脚本接受以下选项：
+
+```text
+-c, --config FILE  指定配置文件
+-l, --loop         启动 loop_fusion_node
+-g, --global       启动 global_fusion_node
+-h, --help         查看帮助
+```
+
+图像、IMU 和输出话题仍由 YAML 配置中的 `image0_topic`、`image1_topic`、
+`imu_topic` 等字段决定。图像发布端需要发布 ROSA `shm_msgs::msg::Image` 兼容消息。
+脚本会在退出或收到 Ctrl-C 时关闭由它启动的全部节点。
+
+## 上游 ROS1 使用说明（仅供参考）
+
 <img src="https://github.com/HKUST-Aerial-Robotics/VINS-Fusion/blob/master/support_files/image/kitti_rank.png" width = 80% height = 80% />
 
 We are the **top** open-sourced stereo algorithm on [KITTI Odometry Benchmark](http://www.cvlibs.net/datasets/kitti/eval_odometry.php) (12.Jan.2019).

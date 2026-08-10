@@ -6,8 +6,8 @@ imu: 1
 num_of_cam: 2  
 
 imu_topic: "/sensor/imu/orin"
-image0_topic: "/bridge/sensor/camera/stereo_left/image/raw"
-image1_topic: "/bridge/sensor/camera/stereo_right/image/raw"
+image0_topic: "/sensor/camera/stereo_left/image/raw"
+image1_topic: "/sensor/camera/stereo_right/image/raw"
 output_path: "~/output/"
 
 cam0_calib: "cam0_pinhole.yaml"

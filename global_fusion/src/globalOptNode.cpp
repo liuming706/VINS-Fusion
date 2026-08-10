@@ -78,10 +78,10 @@ void GPS_callback(const sensor_msgs::NavSatFixConstPtr &GPS_msg)
     m_buf.unlock();
 }
 
-void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
+void vio_callback(const nav_msgs::OdometryConstPtr &pose_msg)
 {
     // printf("vio_callback! \n");
-    double t = pose_msg->header.stamp.toSec();
+    double t = rosa::Time(pose_msg->header.stamp).seconds();
     last_vio_t = t;
     Eigen::Vector3d vio_t(pose_msg->pose.pose.position.x, pose_msg->pose.pose.position.y, pose_msg->pose.pose.position.z);
     Eigen::Quaterniond vio_q;
@@ -94,7 +94,7 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     m_buf.lock();
     while (!gpsQueue.empty()) {
         sensor_msgs::NavSatFixConstPtr GPS_msg = gpsQueue.front();
-        double gps_t = GPS_msg->header.stamp.toSec();
+        double gps_t = rosa::Time(GPS_msg->header.stamp).seconds();
         printf("vio t: %f, gps t: %f \n", t, gps_t);
         // 10ms sync tolerance
         if (gps_t >= t - 0.01 && gps_t <= t + 0.01) {
@@ -140,7 +140,7 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     std::ofstream foutC("/home/tony-ws1/output/vio_global.csv", ios::app);
     foutC.setf(ios::fixed, ios::floatfield);
     foutC.precision(0);
-    foutC << pose_msg->header.stamp.toSec() * 1e9 << ",";
+    foutC << rosa::Time(pose_msg->header.stamp).seconds() * 1e9 << ",";
     foutC.precision(5);
     foutC << global_t.x() << "," << global_t.y() << "," << global_t.z() << "," << global_q.w() << "," << global_q.x()
           << "," << global_q.y() << "," << global_q.z() << endl;
@@ -154,8 +154,8 @@ int main(int argc, char **argv)
 
     global_path = &globalEstimator.global_path;
 
-    ros::Subscriber sub_GPS = n.subscribe("/gps", 100, GPS_callback);
-    ros::Subscriber sub_vio = n.subscribe("/vins_estimator/odometry", 100, vio_callback);
+    ros::Subscriber sub_GPS = n.subscribe<sensor_msgs::NavSatFix>("/gps", 100, GPS_callback);
+    ros::Subscriber sub_vio = n.subscribe<nav_msgs::Odometry>("/vins_estimator/odometry", 100, vio_callback);
     pub_global_path = n.advertise<nav_msgs::Path>("global_path", 100);
     pub_global_odometry = n.advertise<nav_msgs::Odometry>("global_odometry", 100);
     pub_car = n.advertise<visualization_msgs::MarkerArray>("car_model", 1000);

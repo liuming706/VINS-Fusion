@@ -24,6 +24,7 @@ ros::Publisher pub_keyframe_point;
 ros::Publisher pub_extrinsic;
 
 ros::Publisher pub_image_track;
+std::shared_ptr<rosa::TransformBroadcaster> tf_broadcaster;
 
 CameraPoseVisualization cameraposevisual(1, 0, 0, 1);
 static double sum_of_path = 0;
@@ -45,6 +46,7 @@ void registerPub(ros::NodeHandle &n)
     pub_keyframe_point = n.advertise<sensor_msgs::PointCloud>("keyframe_point", 1000);
     pub_extrinsic = n.advertise<nav_msgs::Odometry>("extrinsic", 1000);
     pub_image_track = n.advertise<sensor_msgs::Image>("image_track", 1000);
+    tf_broadcaster = std::make_shared<rosa::TransformBroadcaster>(n.node());
 
     cameraposevisual.setScale(0.1);
     cameraposevisual.setLineWidth(0.01);
@@ -150,7 +152,7 @@ void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)
         ofstream foutC(VINS_RESULT_PATH, ios::app);
         foutC.setf(ios::fixed, ios::floatfield);
         foutC.precision(0);
-        foutC << header.stamp.toSec() * 1e9 << ",";
+        foutC << rosa::Time(header.stamp).seconds() * 1e9 << ",";
         foutC.precision(5);
         foutC << estimator.Ps[WINDOW_SIZE].x() << "," << estimator.Ps[WINDOW_SIZE].y() << ","
               << estimator.Ps[WINDOW_SIZE].z() << "," << tmp_Q.w() << "," << tmp_Q.x() << "," << tmp_Q.y() << ","
@@ -158,7 +160,7 @@ void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)
               << estimator.Vs[WINDOW_SIZE].z() << "," << endl;
         foutC.close();
         Eigen::Vector3d tmp_T = estimator.Ps[WINDOW_SIZE];
-        printf("time: %f, t: %f %f %f q: %f %f %f %f \n", header.stamp.toSec(), tmp_T.x(), tmp_T.y(), tmp_T.z(),
+        printf("time: %f, t: %f %f %f q: %f %f %f %f \n", rosa::Time(header.stamp).seconds(), tmp_T.x(), tmp_T.y(), tmp_T.z(),
                tmp_Q.w(), tmp_Q.x(), tmp_Q.y(), tmp_Q.z());
     }
 }
@@ -280,31 +282,39 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
 void pubTF(const Estimator &estimator, const std_msgs::Header &header)
 {
     if (estimator.solver_flag != Estimator::SolverFlag::NON_LINEAR) return;
-    static tf::TransformBroadcaster br;
-    tf::Transform transform;
-    tf::Quaternion q;
     // body frame
     Vector3d correct_t;
     Quaterniond correct_q;
     correct_t = estimator.Ps[WINDOW_SIZE];
     correct_q = estimator.Rs[WINDOW_SIZE];
 
-    transform.setOrigin(tf::Vector3(correct_t(0), correct_t(1), correct_t(2)));
-    q.setW(correct_q.w());
-    q.setX(correct_q.x());
-    q.setY(correct_q.y());
-    q.setZ(correct_q.z());
-    transform.setRotation(q);
-    br.sendTransform(tf::StampedTransform(transform, header.stamp, "world", "body"));
+    geometry_msgs::msg::TransformStamped body_tf;
+    body_tf.header = header;
+    body_tf.header.frame_id = "world";
+    body_tf.child_frame_id = "body";
+    body_tf.transform.translation.x = correct_t.x();
+    body_tf.transform.translation.y = correct_t.y();
+    body_tf.transform.translation.z = correct_t.z();
+    body_tf.transform.rotation.w = correct_q.w();
+    body_tf.transform.rotation.x = correct_q.x();
+    body_tf.transform.rotation.y = correct_q.y();
+    body_tf.transform.rotation.z = correct_q.z();
+    tf_broadcaster->sendTransform(body_tf);
 
     // camera frame
-    transform.setOrigin(tf::Vector3(estimator.tic[0].x(), estimator.tic[0].y(), estimator.tic[0].z()));
-    q.setW(Quaterniond(estimator.ric[0]).w());
-    q.setX(Quaterniond(estimator.ric[0]).x());
-    q.setY(Quaterniond(estimator.ric[0]).y());
-    q.setZ(Quaterniond(estimator.ric[0]).z());
-    transform.setRotation(q);
-    br.sendTransform(tf::StampedTransform(transform, header.stamp, "body", "camera"));
+    Quaterniond camera_q(estimator.ric[0]);
+    geometry_msgs::msg::TransformStamped camera_tf;
+    camera_tf.header = header;
+    camera_tf.header.frame_id = "body";
+    camera_tf.child_frame_id = "camera";
+    camera_tf.transform.translation.x = estimator.tic[0].x();
+    camera_tf.transform.translation.y = estimator.tic[0].y();
+    camera_tf.transform.translation.z = estimator.tic[0].z();
+    camera_tf.transform.rotation.w = camera_q.w();
+    camera_tf.transform.rotation.x = camera_q.x();
+    camera_tf.transform.rotation.y = camera_q.y();
+    camera_tf.transform.rotation.z = camera_q.z();
+    tf_broadcaster->sendTransform(camera_tf);
 
     nav_msgs::Odometry odometry;
     odometry.header = header;

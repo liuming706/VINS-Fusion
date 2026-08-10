@@ -1,28 +1,28 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.16)
 project(loop_fusion)
 
-set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_CXX_FLAGS "-std=c++11")
-# -DEIGEN_USE_MKL_ALL")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(catkin REQUIRED COMPONENTS roscpp std_msgs nav_msgs camera_models
-                                        cv_bridge roslib)
-
-find_package(OpenCV)
-
+find_package(ament_cmake REQUIRED)
+find_package(rosa REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(shm_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(camera_models REQUIRED)
+find_package(OpenCV REQUIRED)
 find_package(Ceres REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(Boost REQUIRED)
+get_target_property(EIGEN3_INCLUDE_DIRS Eigen3::Eigen INTERFACE_INCLUDE_DIRECTORIES)
+list(GET EIGEN3_INCLUDE_DIRS 0 EIGEN3_INCLUDE_DIR)
+get_filename_component(EIGEN3_INCLUDE_PARENT "${EIGEN3_INCLUDE_DIR}" DIRECTORY)
 
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-find_package(Eigen3)
-
-include_directories(${catkin_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS}
-                    ${EIGEN3_INCLUDE_DIR})
-
-catkin_package()
-
-add_executable(
-  loop_fusion_node
+add_executable(loop_fusion_node
   src/pose_graph_node.cpp
   src/pose_graph.cpp
   src/keyframe.cpp
@@ -36,6 +36,26 @@ add_executable(
   src/ThirdParty/DUtils/Timestamp.cpp
   src/ThirdParty/DVision/BRIEF.cpp
   src/ThirdParty/VocabularyBinary.cpp)
+target_include_directories(loop_fusion_node PRIVATE
+  src
+  ../rosa_compat/include
+  ${EIGEN3_INCLUDE_PARENT})
+target_link_libraries(loop_fusion_node PRIVATE
+  rosa::rosa
+  std_msgs::std_msgs
+  geometry_msgs::geometry_msgs
+  nav_msgs::nav_msgs
+  sensor_msgs::sensor_msgs
+  visualization_msgs::visualization_msgs
+  shm_msgs::shm_msgs
+  cv_bridge::cv_bridge
+  camera_models::camera_models
+  Boost::boost
+  ${OpenCV_LIBS}
+  ${CERES_LIBRARIES}
+  Eigen3::Eigen)
+target_compile_options(loop_fusion_node PRIVATE -Wno-error=maybe-uninitialized)
 
-target_link_libraries(loop_fusion_node ${catkin_LIBRARIES} ${OpenCV_LIBS}
-                      ${CERES_LIBRARIES})
+install(TARGETS loop_fusion_node DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY ../support_files/ DESTINATION share/${PROJECT_NAME}/support_files)
+ament_package()
